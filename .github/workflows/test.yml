@@ -38,3 +38,11 @@ jobs:
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} \
           -d '{"mergeable_state":"draft"}'
+    - name: Set status check
+      if: always()
+      uses: peter-evans/create-or-update-check@v1
+      with:
+        name: Test Suite
+        status: ${{ job.status }}
+        conclusion: ${{ job.status == 'success' || job.status == 'neutral' ? 'success' : 'failure' }}
+        details_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
