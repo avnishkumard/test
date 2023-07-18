@@ -10,31 +10,37 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-    
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: 14
-    
-    - name: Install dependencies
-      run: npm install
-      
-    - name: Run test cases
-      run: npm test
-    
-    - name: Check test results
-      id: test-results
-      run: echo "::set-output name=failed_tests::$(npm run test -- --json | jq '.stats.failures')"
-    
-    - name: Disable merge if tests fail
-      if: steps.test-results.outputs.failed_tests != '0'
-      run: |
-        echo "Tests failed. Disabling merge for this pull request."
-        curl -X PATCH -H "Authorization: Bearer ${{ secrets.TOKEN }}" \
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 14
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run test cases
+        run: npm test
+
+      - name: Check test results
+        id: test-results
+        run: echo "::set-output name=failed_tests::$(npm run test -- --json | jq '.stats.failures')"
+
+      - name: Disable merge if tests fail
+        if: steps.test-results.outputs.failed_tests != '0'
+        run: |
+          echo "Tests failed. Disabling merge for this pull request."
+          TOKEN=$(curl -s -X POST -H "Authorization: token ${{ secrets.TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} \
-          -d '{"mergeable_state":"draft"}'
+          https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/rerun \
+          | jq -r '.workflow_url' \
+          | awk -F '/' '{print $NF}')
+          URL="https://api.github.com/repos/${{ github.repository }}/check-runs?check_name=Test%20Suite"
+          HEADERS="-H 'Accept: application/vnd.github.v3+json' -H 'Authorization: Bearer $TOKEN'"
+          DATA="{\"name\": \"Test Suite\", \"status\": \"completed\", \"conclusion\": \"failure\", \"output\": {\"title\": \"Test Suite Failed\", \"summary\": \"The test suite failed. Please fix the issues before merging.\"}}"
+          eval "curl -X POST $HEADERS $URL -d '$DATA'"
+          exit 1
